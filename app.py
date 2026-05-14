@@ -1038,14 +1038,16 @@ def page_import(user):
                         name = str(row.get("Agency","")).strip()
                         if not name or name.lower() in ("total","grand total","nan"):
                             continue
-try:
-    v = row.get("Final Initial Outlay \n(Nu. in million)", 0)
-    init_v = 0.0 if (v is None or str(v).strip() in ('', 'nan', 'NaN')) else float(v)
-except: init_v = 0.0
-try:
-    v = row.get("Revised MTR Outlay (Nu. in million)", 0)
-    rev_v = 0.0 if (v is None or str(v).strip() in ('', 'nan', 'NaN')) else float(v)
-except: rev_v = 0.0
+                    try:
+                        v = row.get("Final Initial Outlay \n(Nu. in million)", 0)
+                        init_v = 0.0 if (v is None or str(v).strip() in ('', 'nan', 'NaN')) else float(v)
+                    except Exception:
+                        init_v = 0.0
+                    try:
+                        v = row.get("Revised MTR Outlay (Nu. in million)", 0)
+                        rev_v = 0.0 if (v is None or str(v).strip() in ('', 'nan', 'NaN')) else float(v)
+                    except Exception:
+                        rev_v = 0.0
                         rmk = row.get("Remarks","")
                         rmk = str(rmk).strip() if pd.notna(rmk) and str(rmk).lower() != "nan" else None
                         if init_v == 0 and rev_v == 0:
