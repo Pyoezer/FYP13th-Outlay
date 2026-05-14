@@ -198,9 +198,10 @@ PLOT_LAYOUT = dict(
 # ─── SUPABASE ─────────────────────────────────────────────────────────────────
 @st.cache_resource
 def init_supabase():
-    url = "https://mferkujrkuhkriwildgk.supabase.co"
-    key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mZXJrdWpya3Voa3Jpd2lsZGdrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODcxNzE3NSwiZXhwIjoyMDk0MjkzMTc1fQ.jBOhSXWlu419Mk0sIjmuPRwygxHE4fIljC-J255CpDU"
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_ANON_KEY"]
     return create_client(url, key)
+
 supabase = init_supabase()
 
 # ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -304,7 +305,7 @@ def show_login():
                 with st.spinner("Signing in…"):
                     user, session, err = do_login(email.strip(), password)
                 if err:
-                    st.error(f"Login failed: {err}")
+                    st.error("Incorrect email or password.")
                 else:
                     profile = get_profile(user.id)
                     st.session_state["user"] = user
@@ -330,7 +331,7 @@ def show_sidebar(profile: dict) -> str:
         """, unsafe_allow_html=True)
 
         role = profile.get("role", "viewer")
-        pages = ["📊  Dashboard", "🔍  Activity Explorer", "🏛  Agencies"]
+        pages = ["📊  Dashboard", "🔍  Activity Explorer", "🏛  Agencies", "🤖  AI Assistant"]
         if role in ("admin", "editor"):
             pages += ["✏️  Manage Activities", "🏢  Manage Agencies"]
         if role == "admin":
@@ -1038,16 +1039,16 @@ def page_import(user):
                         name = str(row.get("Agency","")).strip()
                         if not name or name.lower() in ("total","grand total","nan"):
                             continue
-                    try:
-                        v = row.get("Final Initial Outlay \n(Nu. in million)", 0)
-                        init_v = 0.0 if (v is None or str(v).strip() in ('', 'nan', 'NaN')) else float(v)
-                    except Exception:
-                        init_v = 0.0
-                    try:
-                        v = row.get("Revised MTR Outlay (Nu. in million)", 0)
-                        rev_v = 0.0 if (v is None or str(v).strip() in ('', 'nan', 'NaN')) else float(v)
-                    except Exception:
-                        rev_v = 0.0
+                        try:
+                            v = row.get("Final Initial Outlay \n(Nu. in million)", 0)
+                            init_v = 0.0 if (v is None or str(v).strip() in ('', 'nan', 'NaN')) else float(v)
+                        except Exception:
+                            init_v = 0.0
+                        try:
+                            v = row.get("Revised MTR Outlay (Nu. in million)", 0)
+                            rev_v = 0.0 if (v is None or str(v).strip() in ('', 'nan', 'NaN')) else float(v)
+                        except Exception:
+                            rev_v = 0.0
                         rmk = row.get("Remarks","")
                         rmk = str(rmk).strip() if pd.notna(rmk) and str(rmk).lower() != "nan" else None
                         if init_v == 0 and rev_v == 0:
@@ -1195,6 +1196,7 @@ def main():
         "📊  Dashboard":          page_dashboard,
         "🔍  Activity Explorer":  page_explorer,
         "🏛  Agencies":           page_agencies,
+        "🤖  AI Assistant":       page_ai_assistant,
     }
     if has_role(profile, "editor"):
         route_map["✏️  Manage Activities"] = lambda: page_manage_activities(profile)
@@ -1212,3 +1214,191 @@ def main():
 
 if __name__ == "__main__":
     main()
+# ─── AI ASSISTANT ─────────────────────────────────────────────────────────────
+def page_ai_assistant():
+    st.markdown("## AI Assistant")
+    st.caption("Ask anything about the 13th Five-Year Plan data. Powered by Claude AI.")
+
+    # Init chat history
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "chat_context_loaded" not in st.session_state:
+        st.session_state.chat_context_loaded = False
+
+    # Load data for context
+    acts = load_activities()
+    ags  = load_agencies()
+
+    # Build a compact data summary for Claude's context
+    def build_context():
+        lines = []
+        lines.append("=== 13th Five-Year Plan Mid-Term Review Database ===")
+        lines.append(f"Total activities: {len(acts)}")
+
+        if not acts.empty:
+            total_outlay = acts['outlay'].sum()
+            lines.append(f"Total original outlay: Nu. {total_outlay:,.1f} million")
+
+            # Cluster summary
+            if 'cluster' in acts.columns:
+                lines.append("\n--- Outlay by Cluster ---")
+                cluster_grp = acts.groupby('cluster')['outlay'].agg(['sum','count'])
+                for cl, row in cluster_grp.iterrows():
+                    lines.append(f"  {cl}: Nu. {row['sum']:,.1f}M ({int(row['count'])} activities)")
+
+            # Activity type summary
+            if 'activity_type' in acts.columns:
+                lines.append("\n--- Activity Types ---")
+                type_grp = acts['activity_type'].value_counts()
+                for t, c in type_grp.items():
+                    lines.append(f"  {t}: {c}")
+
+            # Funding status summary
+            if 'funding_status' in acts.columns:
+                lines.append("\n--- Funding Status Summary ---")
+                fund_grp = acts['funding_status'].value_counts().head(8)
+                for f, c in fund_grp.items():
+                    lines.append(f"  {f}: {c} activities")
+
+            # Top agencies by outlay
+            if 'agency' in acts.columns:
+                lines.append("\n--- Top 10 Agencies by Original Outlay ---")
+                ag_grp = acts.groupby('agency')['outlay'].sum().nlargest(10)
+                for ag, v in ag_grp.items():
+                    lines.append(f"  {ag}: Nu. {v:,.1f}M")
+
+        # Agency-wise initial vs revised
+        if not ags.empty:
+            lines.append("\n--- Agency Outlay: Initial vs Revised (MTR) ---")
+            total_init = ags['initial_outlay'].sum()
+            total_rev  = ags['revised_outlay'].sum()
+            lines.append(f"Total initial: Nu. {total_init:,.1f}M")
+            lines.append(f"Total revised: Nu. {total_rev:,.1f}M")
+            lines.append(f"Net change: Nu. {total_rev - total_init:+,.1f}M ({(total_rev-total_init)/total_init*100:+.1f}%)")
+
+            lines.append("\nAgency changes (sorted by increase):")
+            ags2 = ags.copy()
+            ags2['diff'] = ags2['revised_outlay'] - ags2['initial_outlay']
+            for _, r in ags2.sort_values('diff', ascending=False).head(15).iterrows():
+                lines.append(f"  {r['agency_name']}: {r['diff']:+,.1f}M (initial {r['initial_outlay']:,.1f} → revised {r['revised_outlay']:,.1f})")
+
+        # Sample of individual activities (first 200 for context)
+        if not acts.empty:
+            lines.append("\n--- Activity Records (sample) ---")
+            sample_cols = [c for c in ['project','activity','agency','cluster','outlay','activity_type','funding_status','remarks'] if c in acts.columns]
+            for _, row in acts[sample_cols].head(200).iterrows():
+                parts = []
+                for col in sample_cols:
+                    v = row.get(col)
+                    if v and str(v).strip() and str(v).lower() != 'nan':
+                        parts.append(f"{col}: {str(v)[:80]}")
+                lines.append("  | " + " | ".join(parts))
+
+        return "\n".join(lines)
+
+    # Suggestion chips
+    suggestions = [
+        "Which cluster has the highest outlay?",
+        "Which agencies had the biggest increase at MTR?",
+        "How many activities were dropped?",
+        "What is the total outlay for the Economic cluster?",
+        "Show me activities with no funding committed",
+        "Which agencies had their outlay reduced?",
+        "What are the new activities added at MTR?",
+        "Summarise the overall plan performance",
+    ]
+
+    # Display chat history
+    for msg in st.session_state.chat_history:
+        if msg["role"] == "user":
+            with st.chat_message("user"):
+                st.markdown(msg["content"])
+        else:
+            with st.chat_message("assistant", avatar="🇧🇹"):
+                st.markdown(msg["content"])
+
+    # Suggestion chips — only show if no conversation yet
+    if not st.session_state.chat_history:
+        st.markdown("**Try asking:**")
+        cols = st.columns(2)
+        for i, sug in enumerate(suggestions):
+            with cols[i % 2]:
+                if st.button(sug, key=f"sug_{i}", use_container_width=True):
+                    st.session_state._ai_prompt = sug
+                    st.rerun()
+
+    # Handle suggestion button clicks
+    pre_prompt = st.session_state.pop("_ai_prompt", None)
+
+    # Chat input
+    user_input = st.chat_input("Ask about the plan data…")
+    if pre_prompt:
+        user_input = pre_prompt
+
+    if user_input:
+        # Add user message
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        # Call Claude
+        with st.chat_message("assistant", avatar="🇧🇹"):
+            with st.spinner("Analysing plan data…"):
+                try:
+                    import anthropic
+                    client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+
+                    # Build context once per session
+                    if not st.session_state.chat_context_loaded:
+                        st.session_state.plan_context = build_context()
+                        st.session_state.chat_context_loaded = True
+
+                    system_prompt = f"""You are an expert analyst for the Royal Government of Bhutan's 13th Five-Year Plan Mid-Term Review. You have deep knowledge of the plan database and help officials understand the data.
+
+Here is the complete plan database summary:
+
+{st.session_state.plan_context}
+
+Guidelines:
+- Answer questions directly and precisely using the data above
+- Use Nu. (Ngultrum) and millions when discussing outlays
+- Be concise but thorough — officials need clear, actionable insights
+- When listing items, use bullet points or tables for clarity
+- If asked to compare, show both figures and the difference
+- If data is not available for a question, say so clearly
+- Format numbers with commas for readability (e.g. 12,345.6)
+- You represent the Government of Bhutan — be professional and precise"""
+
+                    # Build messages for API
+                    messages = []
+                    for h in st.session_state.chat_history[:-1]:  # exclude current
+                        messages.append({"role": h["role"], "content": h["content"]})
+                    messages.append({"role": "user", "content": user_input})
+
+                    response = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=1500,
+                        system=system_prompt,
+                        messages=messages,
+                    )
+                    reply = response.content[0].text
+
+                except ImportError:
+                    reply = "⚠️ The `anthropic` package is not installed. Please add `anthropic>=0.25.0` to requirements.txt on GitHub and redeploy."
+                except KeyError:
+                    reply = "⚠️ No Anthropic API key found. Please add `ANTHROPIC_API_KEY = \"sk-ant-...\"` to your Streamlit secrets."
+                except Exception as e:
+                    reply = f"⚠️ Error calling AI: {str(e)}"
+
+            st.markdown(reply)
+            st.session_state.chat_history.append({"role": "assistant", "content": reply})
+
+    # Clear chat button
+    if st.session_state.chat_history:
+        st.markdown("---")
+        col1, _ = st.columns([1, 5])
+        with col1:
+            if st.button("🗑 Clear chat"):
+                st.session_state.chat_history = []
+                st.session_state.chat_context_loaded = False
+                st.rerun()
