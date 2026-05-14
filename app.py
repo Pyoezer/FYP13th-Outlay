@@ -198,10 +198,9 @@ PLOT_LAYOUT = dict(
 # ─── SUPABASE ─────────────────────────────────────────────────────────────────
 @st.cache_resource
 def init_supabase():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_ANON_KEY"]
+    url = "https://mferkujrkuhkriwildgk.supabase.co"
+    key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mZXJrdWpya3Voa3Jpd2lsZGdrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODcxNzE3NSwiZXhwIjoyMDk0MjkzMTc1fQ.jBOhSXWlu419Mk0sIjmuPRwygxHE4fIljC-J255CpDU"
     return create_client(url, key)
-
 supabase = init_supabase()
 
 # ─── AUTH ─────────────────────────────────────────────────────────────────────
