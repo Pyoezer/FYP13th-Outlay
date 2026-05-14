@@ -1402,3 +1402,6 @@ Guidelines:
                 st.session_state.chat_history = []
                 st.session_state.chat_context_loaded = False
                 st.rerun()
+def page_ai_assistant():
+    st.markdown("## AI Assistant")
+    st.info("AI Assistant coming soon. This feature requires an API key to activate.", icon="🤖")
