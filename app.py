@@ -25,6 +25,24 @@ st.set_page_config(
 # ─── STYLES ───────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
+/* Force sidebar always visible */
+[data-testid="stSidebar"] {
+    display: block !important;
+    visibility: visible !important;
+    min-width: 240px !important;
+    transform: none !important;
+}
+[data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
+section[data-testid="stSidebarContent"] {
+    display: block !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..700&family=DM+Sans:wght@300..600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* App background */
