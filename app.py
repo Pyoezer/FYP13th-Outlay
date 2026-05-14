@@ -1212,8 +1212,6 @@ def main():
         st.error("You don't have permission to view this page.")
 
 
-if __name__ == "__main__":
-    main()
 # ─── AI ASSISTANT ─────────────────────────────────────────────────────────────
 def page_ai_assistant():
     st.markdown("## AI Assistant")
@@ -1402,3 +1400,6 @@ Guidelines:
                 st.session_state.chat_history = []
                 st.session_state.chat_context_loaded = False
                 st.rerun()
+
+if __name__ == "__main__":
+    main()
