@@ -305,7 +305,7 @@ def show_login():
                 with st.spinner("Signing in…"):
                     user, session, err = do_login(email.strip(), password)
                 if err:
-                    st.error("Incorrect email or password.")
+    st.error(f"Login failed: {err}")
                 else:
                     profile = get_profile(user.id)
                     st.session_state["user"] = user
