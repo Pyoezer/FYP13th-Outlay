@@ -200,6 +200,7 @@ PLOT_LAYOUT = dict(
 def init_supabase():
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_ANON_KEY"]
+    st.write(f"Connecting to: {url}")
     return create_client(url, key)
 
 supabase = init_supabase()
